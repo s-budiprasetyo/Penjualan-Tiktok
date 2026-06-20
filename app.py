@@ -156,13 +156,17 @@ if uploaded is not None:
 
 st.sidebar.divider()
 st.sidebar.subheader("🔧 Pemetaan Kolom")
-kolom = list(posts.columns)
-def cari(default):
-    return kolom.index(default) if default in kolom else 0
-col_tanggal = st.sidebar.selectbox("Kolom Tanggal", kolom, index=cari("tanggal"))
-col_produk = st.sidebar.selectbox("Kolom Produk", kolom, index=cari("produk"))
-col_viewer = st.sidebar.selectbox("Kolom Viewer", kolom, index=cari("viewer"))
-col_pembeli = st.sidebar.selectbox("Kolom Pembeli", kolom, index=cari("pembeli"))
+st.sidebar.caption("Kolom sudah dipetakan otomatis & dikunci agar tidak salah. "
+                   "(Pada data hasil upload, pemetaan ini bisa diaktifkan untuk disesuaikan.)")
+
+# Nilai pemetaan dikunci ke nama kolom yang benar.
+col_tanggal, col_produk, col_viewer, col_pembeli = "tanggal", "produk", "viewer", "pembeli"
+
+# Ditampilkan sebagai dropdown yang DINONAKTIFKAN (disabled) — terlihat tapi tak bisa salah.
+st.sidebar.selectbox("Kolom Tanggal", [col_tanggal], index=0, disabled=True)
+st.sidebar.selectbox("Kolom Produk", [col_produk], index=0, disabled=True)
+st.sidebar.selectbox("Kolom Viewer", [col_viewer], index=0, disabled=True)
+st.sidebar.selectbox("Kolom Pembeli", [col_pembeli], index=0, disabled=True)
 
 st.sidebar.divider()
 st.sidebar.subheader("🎚️ Filter Data")
