@@ -1,24 +1,19 @@
 """
-Dashboard Analisis Penjualan TikTok Shop (versi lengkap)
+Dashboard Analisis Penjualan TikTok Shop — Gaya Laporan (SAP-like)
 Tugas Sistem Informasi Manajemen
 
-Menganalisis (1 tahun penuh, Jan–Des 2025):
-- Funnel viewer -> pembeli (tingkat konversi)
-- Tren pembelian, viewer, & konversi per bulan/minggu/hari
-- Profil demografi pembeli: usia, gender, pekerjaan
-- Pembeli per segmen usia x gender (heatmap + bar)
-- Produk terlaris
-- Motivasi pembelian: Kebutuhan vs Senang/Impulsif
+Pola pemakaian (seperti SAP):
+1. Atur PARAMETER LAPORAN di sidebar (periode, produk, pembeli, sumber pembelian).
+2. Klik tombol "🔍 LIHAT LAPORAN".
+3. Grafik & analisis diperbarui sesuai parameter.
 
-CATATAN (untuk presentasi):
-Data adalah SIMULASI yang dibuat otomatis di dalam kode. Data demografi viewer
-per individu TIDAK tersedia publik dari TikTok karena privasi -- TikTok hanya
-memberi data agregat & anonim. Maka data disimulasikan dengan pola realistis.
+Data: SIMULASI 1 tahun penuh (Jan–Des 2025), dibuat di dalam kode.
+Data demografi viewer per individu TIDAK tersedia publik dari TikTok (privasi);
+TikTok hanya memberi data agregat. Maka data disimulasikan dengan pola realistis.
 
 Jalankan lokal:  streamlit run app.py
 """
 
-import io
 import random
 from datetime import datetime
 
@@ -27,8 +22,7 @@ import plotly.express as px
 import streamlit as st
 
 # ──────────────────────────────────────────────────────────────────────────────
-st.set_page_config(page_title="Dashboard TikTok Shop", page_icon="📱", layout="wide")
-
+st.set_page_config(page_title="Laporan Penjualan TikTok Shop", page_icon="📱", layout="wide")
 st.markdown(
     """
     <style>
@@ -40,204 +34,211 @@ st.markdown(
 )
 
 URUT_USIA = ["13-17", "18-24", "25-34", "35-44", "45+"]
+GENDER_OPS = ["Perempuan", "Laki-laki"]
+SUMBER_OPS = ["Dari Postingan", "Dari Toko/Keranjang"]
+LIKE_OPS = ["Like", "Tanpa Like"]
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# GENERATOR DATA SIMULASI — 1 TAHUN PENUH (tertanam di kode)
+# GENERATOR DATA SIMULASI — 1 TAHUN PENUH
 # ──────────────────────────────────────────────────────────────────────────────
 @st.cache_data(show_spinner=False)
 def buat_data_simulasi():
     """
-    posts   : ringkasan tiap postingan (viewer, pembeli, like, durasi tonton)
-    pembeli : satu baris per pembeli (sampel), lengkap profil demografi
+    Hasilkan tabel 'pembeli': satu baris per pembeli (sampel), berisi:
+    tanggal, produk, jenis_produk, usia, gender, pekerjaan, motivasi,
+    sumber_pembelian (postingan / toko-keranjang), status_like (like / tanpa like).
+    Juga tabel 'posts' untuk total viewer & pembeli per postingan.
 
-    LOGIKA SIMULASI (bisa dijelaskan ke dosen):
-    - Produk 'basic' (kaos, hijab, kemeja, dalaman) -> konversi lebih tinggi,
-      dibeli lebih karena KEBUTUHAN, peminat merata di semua usia.
-    - Produk 'tren' (aksesoris viral, sneakers, dll) -> lebih impulsif,
-      dibeli lebih karena SENANG, peminat condong usia muda (13-24).
-    - Lonjakan engagement saat tanggal kembar (1.1 ... 12.12) ala event TikTok.
-    - Tren naik perlahan sepanjang tahun (akun makin besar).
+    LOGIKA (untuk dijelaskan ke dosen):
+    - Produk 'basic' (kaos, hijab, kemeja, dalaman): konversi tinggi, KEBUTUHAN,
+      usia merata, lebih banyak beli "Dari Toko/Keranjang".
+    - Produk 'tren' (aksesoris viral, sneakers, dll): impulsif, SENANG, usia muda,
+      lebih banyak beli "Dari Postingan".
+    - Pembeli yang datang "Dari Postingan" lebih sering memberi Like.
+    - Lonjakan engagement saat tanggal kembar (1.1 ... 12.12). Tren naik sepanjang tahun.
     """
     rnd = random.Random(21)
-
     PRODUK = {
-        "Kaos Polos": "basic",
-        "Hijab Voal": "basic",
-        "Kemeja Formal": "basic",
-        "Pakaian Dalam": "basic",
-        "Aksesoris Viral": "tren",
-        "Tas Selempang Trendy": "tren",
-        "Sepatu Sneakers": "tren",
-        "Jam Tangan Fashion": "tren",
-        "Kacamata Fashion": "tren",
+        "Kaos Polos": "basic", "Hijab Voal": "basic", "Kemeja Formal": "basic",
+        "Pakaian Dalam": "basic", "Aksesoris Viral": "tren", "Tas Selempang Trendy": "tren",
+        "Sepatu Sneakers": "tren", "Jam Tangan Fashion": "tren", "Kacamata Fashion": "tren",
         "Bucket Hat": "tren",
     }
-    GENDER = ["Perempuan", "Laki-laki"]
     PEKERJAAN = ["Pelajar/Mahasiswa", "Karyawan", "Wiraswasta",
                  "Ibu Rumah Tangga", "Freelancer", "Lainnya"]
     bobot_usia = {"basic": [5, 30, 35, 20, 10], "tren": [25, 45, 20, 7, 3]}
     bobot_kerja = {"basic": [30, 30, 15, 15, 5, 5], "tren": [50, 25, 10, 3, 9, 3]}
 
     posts, pembeli_rows, pid = [], [], 0
-
     for tgl in pd.date_range("2025-01-01", "2025-12-31", freq="D"):
-        faktor = 1 + (tgl.month - 1) * 0.04      # tren naik sepanjang tahun
-        if tgl.day == tgl.month:                  # lonjakan tanggal kembar
+        faktor = 1 + (tgl.month - 1) * 0.04
+        if tgl.day == tgl.month:
             faktor *= 1.8
-
         for _ in range(rnd.randint(1, 3)):
             pid += 1
             produk = rnd.choice(list(PRODUK))
             jenis = PRODUK[produk]
             viewer = int(rnd.randint(500, 50000) * faktor)
-            durasi = round(rnd.uniform(3, 35), 1)
-            like = int(viewer * rnd.uniform(0.03, 0.12))
-
             base_rate = rnd.uniform(0.015, 0.04) if jenis == "basic" else rnd.uniform(0.005, 0.03)
             jml_pembeli = max(0, int(viewer * base_rate))
-
-            posts.append({
-                "post_id": pid, "tanggal": tgl, "produk": produk, "jenis_produk": jenis,
-                "viewer": viewer, "pembeli": jml_pembeli, "like": like,
-                "durasi_tonton": durasi,
-            })
+            posts.append({"tanggal": tgl, "produk": produk, "jenis_produk": jenis,
+                          "viewer": viewer, "pembeli": jml_pembeli})
 
             sampel = max(1, jml_pembeli // 20) if jml_pembeli else 0
             for _ in range(sampel):
                 usia = rnd.choices(URUT_USIA, weights=bobot_usia[jenis])[0]
                 pekerjaan = rnd.choices(PEKERJAAN, weights=bobot_kerja[jenis])[0]
                 if produk in ("Hijab Voal", "Pakaian Dalam"):
-                    gender = rnd.choices(GENDER, weights=[90, 10])[0]
+                    gender = rnd.choices(GENDER_OPS, weights=[90, 10])[0]
                 elif produk in ("Sepatu Sneakers", "Jam Tangan Fashion", "Bucket Hat"):
-                    gender = rnd.choices(GENDER, weights=[40, 60])[0]
+                    gender = rnd.choices(GENDER_OPS, weights=[40, 60])[0]
                 else:
-                    gender = rnd.choices(GENDER, weights=[55, 45])[0]
+                    gender = rnd.choices(GENDER_OPS, weights=[55, 45])[0]
                 motivasi = (rnd.choices(["Kebutuhan", "Senang/Impulsif"], weights=[75, 25])[0]
                             if jenis == "basic"
                             else rnd.choices(["Kebutuhan", "Senang/Impulsif"], weights=[30, 70])[0])
+                sumber = (rnd.choices(SUMBER_OPS, weights=[70, 30])[0] if jenis == "tren"
+                          else rnd.choices(SUMBER_OPS, weights=[45, 55])[0])
+                status_like = (rnd.choices(LIKE_OPS, weights=[65, 35])[0]
+                               if sumber == "Dari Postingan"
+                               else rnd.choices(LIKE_OPS, weights=[35, 65])[0])
                 pembeli_rows.append({
-                    "post_id": pid, "tanggal": tgl, "produk": produk, "jenis_produk": jenis,
-                    "usia": usia, "gender": gender, "pekerjaan": pekerjaan, "motivasi": motivasi,
+                    "tanggal": tgl, "produk": produk, "jenis_produk": jenis,
+                    "usia": usia, "gender": gender, "pekerjaan": pekerjaan,
+                    "motivasi": motivasi, "sumber_pembelian": sumber, "status_like": status_like,
                 })
-
     return pd.DataFrame(posts), pd.DataFrame(pembeli_rows)
 
 
-@st.cache_data(show_spinner=False)
-def baca_html(file_bytes: bytes):
-    return pd.read_html(io.BytesIO(file_bytes))
-
-
-# ──────────────────────────────────────────────────────────────────────────────
 posts_all, pembeli_all = buat_data_simulasi()
-
-st.title("📱 Dashboard Analisis TikTok Shop")
-st.caption("Analisis konversi viewer → pembeli & profil demografi · Data simulasi 1 tahun (2025)")
+SEMUA_PRODUK = sorted(posts_all["produk"].unique())
+TGL_MIN, TGL_MAX = posts_all["tanggal"].min().date(), posts_all["tanggal"].max().date()
 
 # ──────────────────────────────────────────────────────────────────────────────
-# SIDEBAR
+# State awal: default tampilkan semua data (sebelum tombol diklik)
 # ──────────────────────────────────────────────────────────────────────────────
-st.sidebar.title("🛒 Sumber Data")
-st.sidebar.caption("Pakai data simulasi, atau upload file HTML hasil scrape TikTok.")
-uploaded = st.sidebar.file_uploader("Upload file HTML (opsional)", type=["html", "htm"])
-pakai_simulasi = st.sidebar.checkbox("Pakai data simulasi", value=True)
+if "param" not in st.session_state:
+    st.session_state.param = {
+        "tgl_mulai": TGL_MIN, "tgl_selesai": TGL_MAX,
+        "produk": SEMUA_PRODUK, "gender": GENDER_OPS, "usia": URUT_USIA,
+        "sumber": SUMBER_OPS, "like": LIKE_OPS,
+    }
 
-posts, pembeli = posts_all.copy(), pembeli_all.copy()
-if uploaded is not None:
-    try:
-        tabel = baca_html(uploaded.read())
-        if tabel:
-            st.sidebar.success(f"{len(tabel)} tabel terbaca dari HTML.")
-            st.sidebar.caption("Catatan: analisis demografi tetap memakai data simulasi, "
-                               "karena file scrape umumnya tak memuat demografi viewer.")
-    except Exception as e:  # noqa: BLE001
-        st.sidebar.error(f"Gagal membaca HTML: {e}")
+# ──────────────────────────────────────────────────────────────────────────────
+# SIDEBAR — PARAMETER LAPORAN (gaya SAP, di dalam form + tombol)
+# ──────────────────────────────────────────────────────────────────────────────
+st.sidebar.title("🧾 Parameter Laporan")
+st.sidebar.caption("Atur parameter di bawah, lalu klik **LIHAT LAPORAN** untuk menampilkan hasil.")
 
-st.sidebar.divider()
-st.sidebar.subheader("🔧 Pemetaan Kolom")
-st.sidebar.caption("Kolom sudah dipetakan otomatis & dikunci agar tidak salah. "
-                   "(Pada data hasil upload, pemetaan ini bisa diaktifkan untuk disesuaikan.)")
+with st.sidebar.form("form_parameter"):
+    st.markdown("**🗓️ Periode Laporan (Tanggal Transaksi)**")
+    c1, c2 = st.columns(2)
+    tgl_mulai = c1.date_input("Mulai", value=st.session_state.param["tgl_mulai"],
+                              min_value=TGL_MIN, max_value=TGL_MAX)
+    tgl_selesai = c2.date_input("Selesai", value=st.session_state.param["tgl_selesai"],
+                                min_value=TGL_MIN, max_value=TGL_MAX)
 
-# Nilai pemetaan dikunci ke nama kolom yang benar.
-col_tanggal, col_produk, col_viewer, col_pembeli = "tanggal", "produk", "viewer", "pembeli"
+    st.divider()
+    st.markdown("**📦 Jenis Produk**")
+    produk = st.multiselect("Pilih produk (boleh sebagian / semua)", SEMUA_PRODUK,
+                            default=st.session_state.param["produk"])
 
-# Ditampilkan sebagai dropdown yang DINONAKTIFKAN (disabled) — terlihat tapi tak bisa salah.
-st.sidebar.selectbox("Kolom Tanggal", [col_tanggal], index=0, disabled=True)
-st.sidebar.selectbox("Kolom Produk", [col_produk], index=0, disabled=True)
-st.sidebar.selectbox("Kolom Viewer", [col_viewer], index=0, disabled=True)
-st.sidebar.selectbox("Kolom Pembeli", [col_pembeli], index=0, disabled=True)
+    st.divider()
+    st.markdown("**🧑‍🤝‍🧑 Pembeli**")
+    gender = st.multiselect("Gender", GENDER_OPS, default=st.session_state.param["gender"])
+    usia = st.multiselect("Segmen Usia", URUT_USIA, default=st.session_state.param["usia"],
+                          help="Pilih kelompok usia yang ingin ditampilkan.")
 
-st.sidebar.divider()
-st.sidebar.subheader("🎚️ Filter Data")
-produk_pilih = st.sidebar.multiselect("Produk", sorted(posts[col_produk].unique()),
-                                      default=sorted(posts[col_produk].unique()))
-tgl_min, tgl_max = posts[col_tanggal].min(), posts[col_tanggal].max()
-rentang = st.sidebar.date_input("Rentang Tanggal", value=(tgl_min.date(), tgl_max.date()),
-                                min_value=tgl_min.date(), max_value=tgl_max.date())
-granularitas = st.sidebar.radio("Granularitas", ["Harian", "Mingguan", "Bulanan"], index=2)
-freq = {"Harian": "D", "Mingguan": "W", "Bulanan": "MS"}[granularitas]
-usia_pilih = st.sidebar.multiselect("Segmen Usia", URUT_USIA, default=URUT_USIA)
-gender_pilih = st.sidebar.multiselect("Gender", ["Perempuan", "Laki-laki"],
-                                      default=["Perempuan", "Laki-laki"])
-motivasi_pilih = st.sidebar.multiselect("Motivasi", ["Kebutuhan", "Senang/Impulsif"],
-                                        default=["Kebutuhan", "Senang/Impulsif"])
+    st.divider()
+    st.markdown("**👁️ Sumber Pembelian (Viewer)**")
+    sumber = st.multiselect("Sumber", SUMBER_OPS, default=st.session_state.param["sumber"],
+                            help="Pembeli datang dari postingan, atau dari kunjungan toko/keranjang.")
+    status_like = st.multiselect("Status Like", LIKE_OPS, default=st.session_state.param["like"],
+                                 help="Apakah pembeli memberi like pada produk, atau beli tanpa like.")
 
-# Terapkan filter
-mp = posts[col_produk].isin(produk_pilih)
-mb = (pembeli["produk"].isin(produk_pilih) & pembeli["usia"].isin(usia_pilih)
-      & pembeli["gender"].isin(gender_pilih) & pembeli["motivasi"].isin(motivasi_pilih))
-if isinstance(rentang, (list, tuple)) and len(rentang) == 2:
-    mp &= (posts[col_tanggal].dt.date >= rentang[0]) & (posts[col_tanggal].dt.date <= rentang[1])
-    mb &= (pembeli["tanggal"].dt.date >= rentang[0]) & (pembeli["tanggal"].dt.date <= rentang[1])
-posts_f, pembeli_f = posts[mp], pembeli[mb]
+    st.divider()
+    submit = st.form_submit_button("🔍 LIHAT LAPORAN", use_container_width=True, type="primary")
 
-if posts_f.empty:
-    st.warning("Tidak ada data untuk filter ini. Longgarkan filter di sidebar.")
+if submit:
+    st.session_state.param = {
+        "tgl_mulai": tgl_mulai, "tgl_selesai": tgl_selesai, "produk": produk,
+        "gender": gender, "usia": usia, "sumber": sumber, "like": status_like,
+    }
+
+P = st.session_state.param  # parameter aktif
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Terapkan parameter ke data
+# ──────────────────────────────────────────────────────────────────────────────
+mp = (posts_all["produk"].isin(P["produk"])
+      & (posts_all["tanggal"].dt.date >= P["tgl_mulai"])
+      & (posts_all["tanggal"].dt.date <= P["tgl_selesai"]))
+mb = (pembeli_all["produk"].isin(P["produk"])
+      & pembeli_all["gender"].isin(P["gender"])
+      & pembeli_all["usia"].isin(P["usia"])
+      & pembeli_all["sumber_pembelian"].isin(P["sumber"])
+      & pembeli_all["status_like"].isin(P["like"])
+      & (pembeli_all["tanggal"].dt.date >= P["tgl_mulai"])
+      & (pembeli_all["tanggal"].dt.date <= P["tgl_selesai"]))
+posts_f, pembeli_f = posts_all[mp], pembeli_all[mb]
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Header laporan
+# ──────────────────────────────────────────────────────────────────────────────
+st.title("📱 Laporan Penjualan TikTok Shop")
+st.caption(f"Periode **{P['tgl_mulai']:%d %b %Y} – {P['tgl_selesai']:%d %b %Y}** · "
+           f"{len(P['produk'])} jenis produk · Data simulasi")
+
+if posts_f.empty or pembeli_f.empty:
+    st.warning("⚠️ Tidak ada data untuk parameter ini. Longgarkan filter di sidebar, "
+               "lalu klik **LIHAT LAPORAN** lagi.")
     st.stop()
 
 # ──────────────────────────────────────────────────────────────────────────────
 # KPI
 # ──────────────────────────────────────────────────────────────────────────────
-total_viewer = posts_f[col_viewer].sum()
-total_pembeli = posts_f[col_pembeli].sum()
+total_viewer = posts_f["viewer"].sum()
+total_pembeli = posts_f["pembeli"].sum()
 konversi = (total_pembeli / total_viewer * 100) if total_viewer else 0
-durasi_avg = posts_f["durasi_tonton"].mean()
 
-k1, k2, k3, k4, k5 = st.columns(5)
+k1, k2, k3, k4 = st.columns(4)
 k1.metric("Total Viewer", f"{total_viewer:,.0f}")
 k2.metric("Total Pembeli", f"{total_pembeli:,.0f}")
 k3.metric("Tingkat Konversi", f"{konversi:.2f}%")
 k4.metric("Jumlah Postingan", f"{len(posts_f):,}")
-k5.metric("Rata² Durasi Tonton", f"{durasi_avg:.1f} dtk")
 
 st.divider()
 
+# ──────────────────────────────────────────────────────────────────────────────
 # Funnel + Tren
-c1, c2 = st.columns([1, 1.3])
-with c1:
+# ──────────────────────────────────────────────────────────────────────────────
+cc1, cc2 = st.columns([1, 1.3])
+with cc1:
     st.subheader("🔻 Funnel Viewer → Pembeli")
     fdf = pd.DataFrame({"Tahap": ["Viewer", "Pembeli"], "Jumlah": [total_viewer, total_pembeli]})
     figf = px.funnel(fdf, x="Jumlah", y="Tahap")
     figf.update_traces(marker_color=["#25F4EE", "#FE2C55"])
     figf.update_layout(margin=dict(l=0, r=0, t=10, b=0), height=300)
     st.plotly_chart(figf, use_container_width=True)
-with c2:
-    st.subheader("📈 Tren Viewer & Pembeli")
-    tren = (posts_f.set_index(col_tanggal).resample(freq)
-            .agg(viewer=(col_viewer, "sum"), pembeli=(col_pembeli, "sum")).reset_index())
-    figt = px.line(tren, x=col_tanggal, y=["viewer", "pembeli"], markers=True,
-                   labels={"value": "Jumlah", col_tanggal: "Periode", "variable": "Metrik"},
+with cc2:
+    st.subheader("📈 Tren Viewer & Pembeli per Bulan")
+    tren = (posts_f.set_index("tanggal").resample("MS")
+            .agg(viewer=("viewer", "sum"), pembeli=("pembeli", "sum")).reset_index())
+    figt = px.line(tren, x="tanggal", y=["viewer", "pembeli"], markers=True,
+                   labels={"value": "Jumlah", "tanggal": "Bulan", "variable": "Metrik"},
                    color_discrete_sequence=["#25F4EE", "#FE2C55"])
     figt.update_layout(margin=dict(l=0, r=0, t=10, b=0), height=300, legend_title="")
     st.plotly_chart(figt, use_container_width=True)
 
 st.divider()
 
+# ──────────────────────────────────────────────────────────────────────────────
 # Pembelian per bulan
+# ──────────────────────────────────────────────────────────────────────────────
 st.subheader("📅 Jumlah Pembelian per Bulan")
-per_bulan = (posts_f.assign(bulan=posts_f[col_tanggal].dt.to_period("M").astype(str))
-             .groupby("bulan").agg(pembeli=(col_pembeli, "sum")).reset_index())
+per_bulan = (posts_f.assign(bulan=posts_f["tanggal"].dt.to_period("M").astype(str))
+             .groupby("bulan").agg(pembeli=("pembeli", "sum")).reset_index())
 figb = px.bar(per_bulan, x="bulan", y="pembeli", text_auto=True,
               labels={"bulan": "Bulan", "pembeli": "Jumlah Pembeli"})
 figb.update_traces(marker_color="#FE2C55")
@@ -246,9 +247,11 @@ st.plotly_chart(figb, use_container_width=True)
 
 st.divider()
 
-# Segmen usia x gender
-st.subheader("🎯 Pembeli per Segmen Usia × Gender")
-st.caption("Fokus analisis. Angka demografi berbasis sampel — yang relevan PROPORSI antar-segmen.")
+# ──────────────────────────────────────────────────────────────────────────────
+# Profil pembeli: usia x gender (bar + heatmap)
+# ──────────────────────────────────────────────────────────────────────────────
+st.subheader("🎯 Profil Pembeli per Usia & Gender")
+st.caption("Angka demografi berbasis sampel — fokus pada PROPORSI antar-segmen.")
 cs1, cs2 = st.columns(2)
 with cs1:
     seg = pembeli_f.groupby(["usia", "gender"]).size().reset_index(name="jumlah")
@@ -266,57 +269,58 @@ with cs2:
     figh.update_layout(margin=dict(l=0, r=0, t=30, b=0), height=340, title="Heatmap: Usia × Gender")
     st.plotly_chart(figh, use_container_width=True)
 
-# Pekerjaan
-st.subheader("💼 Pembeli berdasarkan Pekerjaan")
-seg_kerja = pembeli_f.groupby("pekerjaan").size().reset_index(name="jumlah").sort_values("jumlah")
-figk = px.bar(seg_kerja, x="jumlah", y="pekerjaan", orientation="h",
-              labels={"jumlah": "Pembeli (sampel)", "pekerjaan": "Pekerjaan"})
-figk.update_traces(marker_color="#7C5CFC")
-figk.update_layout(margin=dict(l=0, r=0, t=10, b=0), height=300)
-st.plotly_chart(figk, use_container_width=True)
+st.divider()
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Sumber pembelian & status like (poin 6)
+# ──────────────────────────────────────────────────────────────────────────────
+st.subheader("👁️ Sumber Pembelian & Interaksi Like")
+cl1, cl2 = st.columns(2)
+with cl1:
+    sb = pembeli_f.groupby("sumber_pembelian").size().reset_index(name="jumlah")
+    figs = px.pie(sb, names="sumber_pembelian", values="jumlah", hole=0.45,
+                  color_discrete_sequence=["#FE2C55", "#7C5CFC"])
+    figs.update_layout(margin=dict(l=0, r=0, t=30, b=0), height=320,
+                       title="Beli dari Postingan vs Toko/Keranjang")
+    st.plotly_chart(figs, use_container_width=True)
+with cl2:
+    lk = pembeli_f.groupby(["sumber_pembelian", "status_like"]).size().reset_index(name="jumlah")
+    figl = px.bar(lk, x="sumber_pembelian", y="jumlah", color="status_like", barmode="group",
+                  labels={"sumber_pembelian": "Sumber", "jumlah": "Pembeli", "status_like": "Like"},
+                  color_discrete_sequence=["#25F4EE", "#FFB347"])
+    figl.update_layout(margin=dict(l=0, r=0, t=30, b=0), height=320, title="Like vs Tanpa Like")
+    st.plotly_chart(figl, use_container_width=True)
 
 st.divider()
 
-# Produk terlaris
-st.subheader("🏆 Produk Terlaris (jumlah pembeli)")
-top_prod = (posts_f.groupby(col_produk).agg(pembeli=(col_pembeli, "sum"))
-            .sort_values("pembeli").reset_index())
-figp = px.bar(top_prod, x="pembeli", y=col_produk, orientation="h",
-              labels={"pembeli": "Jumlah Pembeli", col_produk: "Produk"})
-figp.update_traces(marker_color="#FE2C55")
-figp.update_layout(margin=dict(l=0, r=0, t=10, b=0), height=380)
-st.plotly_chart(figp, use_container_width=True)
-
-st.divider()
-
-# Motivasi
-st.subheader("🧠 Motivasi Pembelian: Kebutuhan vs Senang/Impulsif")
-st.caption("Produk basic (kaos, hijab, kemeja, dalaman) → cenderung KEBUTUHAN; "
-           "produk tren (aksesoris viral, sneakers, dll) → cenderung SENANG/impulsif.")
-cm1, cm2 = st.columns(2)
-with cm1:
+# ──────────────────────────────────────────────────────────────────────────────
+# Produk terlaris + Motivasi
+# ──────────────────────────────────────────────────────────────────────────────
+cpm1, cpm2 = st.columns(2)
+with cpm1:
+    st.subheader("🏆 Produk Terlaris")
+    top = (posts_f.groupby("produk").agg(pembeli=("pembeli", "sum"))
+           .sort_values("pembeli").reset_index())
+    figp = px.bar(top, x="pembeli", y="produk", orientation="h",
+                  labels={"pembeli": "Jumlah Pembeli", "produk": "Produk"})
+    figp.update_traces(marker_color="#FE2C55")
+    figp.update_layout(margin=dict(l=0, r=0, t=10, b=0), height=380)
+    st.plotly_chart(figp, use_container_width=True)
+with cpm2:
+    st.subheader("🧠 Motivasi Pembelian")
+    st.caption("Basic → KEBUTUHAN; tren → SENANG/impulsif.")
     mot = pembeli_f.groupby("motivasi").size().reset_index(name="jumlah")
     figm = px.pie(mot, names="motivasi", values="jumlah", hole=0.45,
                   color_discrete_sequence=["#2DD4BF", "#FFB347"])
-    figm.update_layout(margin=dict(l=0, r=0, t=30, b=0), height=320, title="Proporsi Motivasi")
+    figm.update_layout(margin=dict(l=0, r=0, t=10, b=0), height=380)
     st.plotly_chart(figm, use_container_width=True)
-with cm2:
-    mp2 = pembeli_f.groupby(["produk", "motivasi"]).size().reset_index(name="jumlah")
-    figmp = px.bar(mp2, x="produk", y="jumlah", color="motivasi", barmode="stack",
-                   labels={"produk": "Produk", "jumlah": "Pembeli", "motivasi": "Motivasi"},
-                   color_discrete_sequence=["#2DD4BF", "#FFB347"])
-    figmp.update_layout(margin=dict(l=0, r=0, t=30, b=0), height=320,
-                        title="Motivasi per Produk", xaxis_tickangle=-40)
-    st.plotly_chart(figmp, use_container_width=True)
 
-# Data mentah
-with st.expander("🔍 Lihat data postingan & pembeli (simulasi)"):
-    st.write("**Ringkasan per postingan**")
-    st.dataframe(posts_f, use_container_width=True)
-    st.write("**Detail pembeli (sampel)**")
+# ──────────────────────────────────────────────────────────────────────────────
+# Data mentah & unduh
+# ──────────────────────────────────────────────────────────────────────────────
+with st.expander("🔍 Lihat data pembeli (sesuai parameter)"):
     st.dataframe(pembeli_f, use_container_width=True)
-    st.download_button("⬇️ Unduh CSV data pembeli",
-                       pembeli_f.to_csv(index=False).encode("utf-8"),
-                       file_name="pembeli_tiktok_simulasi.csv", mime="text/csv")
+    st.download_button("⬇️ Unduh CSV", pembeli_f.to_csv(index=False).encode("utf-8"),
+                       file_name="laporan_pembeli_tiktok.csv", mime="text/csv")
 
-st.caption(f"Dashboard di-render {datetime.now():%d %b %Y %H:%M} · Data simulasi 1 tahun · Tugas SIM")
+st.caption(f"Laporan dibuat {datetime.now():%d %b %Y %H:%M} · Data simulasi 1 tahun · Tugas SIM")
