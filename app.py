@@ -121,8 +121,8 @@ TGL_MIN, TGL_MAX = posts_all["tanggal"].min().date(), posts_all["tanggal"].max()
 if "param" not in st.session_state:
     st.session_state.param = {
         "tgl_mulai": TGL_MIN, "tgl_selesai": TGL_MAX,
-        "produk": SEMUA_PRODUK, "gender": GENDER_OPS, "usia": URUT_USIA,
-        "sumber": SUMBER_OPS, "like": LIKE_OPS,
+        "produk": "Semua", "gender": "Semua", "usia": "Semua",
+        "sumber": "Semua", "like": "Semua",
     }
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -141,21 +141,21 @@ with st.sidebar.form("form_parameter"):
 
     st.divider()
     st.markdown("**📦 Jenis Produk**")
-    produk = st.multiselect("Pilih produk (boleh sebagian / semua)", SEMUA_PRODUK,
-                            default=st.session_state.param["produk"])
+    produk = st.selectbox("Pilih produk", ["Semua"] + SEMUA_PRODUK,
+                          index=0, help="Pilih 'Semua' untuk seluruh produk, atau satu produk tertentu.")
 
     st.divider()
     st.markdown("**🧑‍🤝‍🧑 Pembeli**")
-    gender = st.multiselect("Gender", GENDER_OPS, default=st.session_state.param["gender"])
-    usia = st.multiselect("Segmen Usia", URUT_USIA, default=st.session_state.param["usia"],
-                          help="Pilih kelompok usia yang ingin ditampilkan.")
+    gender = st.selectbox("Gender", ["Semua"] + GENDER_OPS, index=0)
+    usia = st.selectbox("Segmen Usia", ["Semua"] + URUT_USIA, index=0,
+                        help="Pilih 'Semua' atau satu kelompok usia.")
 
     st.divider()
     st.markdown("**👁️ Sumber Pembelian (Viewer)**")
-    sumber = st.multiselect("Sumber", SUMBER_OPS, default=st.session_state.param["sumber"],
-                            help="Pembeli datang dari postingan, atau dari kunjungan toko/keranjang.")
-    status_like = st.multiselect("Status Like", LIKE_OPS, default=st.session_state.param["like"],
-                                 help="Apakah pembeli memberi like pada produk, atau beli tanpa like.")
+    sumber = st.selectbox("Sumber", ["Semua"] + SUMBER_OPS, index=0,
+                          help="Pembeli datang dari postingan, atau dari kunjungan toko/keranjang.")
+    status_like = st.selectbox("Status Like", ["Semua"] + LIKE_OPS, index=0,
+                               help="Apakah pembeli memberi like pada produk, atau beli tanpa like.")
 
     st.divider()
     submit = st.form_submit_button("🔍 LIHAT LAPORAN", use_container_width=True, type="primary")
@@ -168,17 +168,28 @@ if submit:
 
 P = st.session_state.param  # parameter aktif
 
+# Bantu: ubah pilihan "Semua" menjadi daftar lengkap untuk filter
+def daftar(pilihan, semua_opsi):
+    """Jika pengguna memilih 'Semua', kembalikan seluruh opsi; jika tidak, satu pilihan."""
+    return semua_opsi if pilihan == "Semua" else [pilihan]
+
+f_produk = daftar(P["produk"], SEMUA_PRODUK)
+f_gender = daftar(P["gender"], GENDER_OPS)
+f_usia = daftar(P["usia"], URUT_USIA)
+f_sumber = daftar(P["sumber"], SUMBER_OPS)
+f_like = daftar(P["like"], LIKE_OPS)
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Terapkan parameter ke data
 # ──────────────────────────────────────────────────────────────────────────────
-mp = (posts_all["produk"].isin(P["produk"])
+mp = (posts_all["produk"].isin(f_produk)
       & (posts_all["tanggal"].dt.date >= P["tgl_mulai"])
       & (posts_all["tanggal"].dt.date <= P["tgl_selesai"]))
-mb = (pembeli_all["produk"].isin(P["produk"])
-      & pembeli_all["gender"].isin(P["gender"])
-      & pembeli_all["usia"].isin(P["usia"])
-      & pembeli_all["sumber_pembelian"].isin(P["sumber"])
-      & pembeli_all["status_like"].isin(P["like"])
+mb = (pembeli_all["produk"].isin(f_produk)
+      & pembeli_all["gender"].isin(f_gender)
+      & pembeli_all["usia"].isin(f_usia)
+      & pembeli_all["sumber_pembelian"].isin(f_sumber)
+      & pembeli_all["status_like"].isin(f_like)
       & (pembeli_all["tanggal"].dt.date >= P["tgl_mulai"])
       & (pembeli_all["tanggal"].dt.date <= P["tgl_selesai"]))
 posts_f, pembeli_f = posts_all[mp], pembeli_all[mb]
@@ -187,8 +198,9 @@ posts_f, pembeli_f = posts_all[mp], pembeli_all[mb]
 # Header laporan
 # ──────────────────────────────────────────────────────────────────────────────
 st.title("📱 Laporan Penjualan TikTok Shop")
+produk_label = "Semua produk" if P["produk"] == "Semua" else P["produk"]
 st.caption(f"Periode **{P['tgl_mulai']:%d %b %Y} – {P['tgl_selesai']:%d %b %Y}** · "
-           f"{len(P['produk'])} jenis produk · Data simulasi")
+           f"{produk_label} · Data simulasi")
 
 if posts_f.empty or pembeli_f.empty:
     st.warning("⚠️ Tidak ada data untuk parameter ini. Longgarkan filter di sidebar, "
