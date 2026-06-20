@@ -35,8 +35,34 @@ st.markdown(
 
 URUT_USIA = ["13-17", "18-24", "25-34", "35-44", "45+"]
 GENDER_OPS = ["Perempuan", "Laki-laki"]
-SUMBER_OPS = ["Dari Postingan", "Dari Toko/Keranjang"]
+SUMBER_OPS = ["Dari Postingan", "Kunjungan Toko"]
 LIKE_OPS = ["Like", "Tanpa Like"]
+
+# ──────────────────────────────────────────────────────────────────────────────
+# IKON (emoji) untuk tampilan dropdown. Emoji hanya untuk DITAMPILKAN; data tetap
+# memakai teks asli, sehingga filter tetap berfungsi benar.
+# ──────────────────────────────────────────────────────────────────────────────
+EMOJI = {
+    # produk
+    "Kaos Polos": "👕", "Hijab Voal": "🧕", "Kemeja Formal": "👔",
+    "Pakaian Dalam": "🩲", "Aksesoris Viral": "💍", "Tas Selempang Trendy": "👜",
+    "Sepatu Sneakers": "👟", "Jam Tangan Fashion": "⌚", "Kacamata Fashion": "🕶️",
+    "Bucket Hat": "🧢",
+    # gender
+    "Perempuan": "👩", "Laki-laki": "👨",
+    # usia
+    "13-17": "🧒", "18-24": "🧑", "25-34": "👩‍💼", "35-44": "👨‍💼", "45+": "🧓",
+    # sumber pembelian
+    "Dari Postingan": "📱", "Kunjungan Toko": "🏪",
+    # status like
+    "Like": "👍", "Tanpa Like": "🚫",
+    # opsi semua
+    "Semua": "🌐",
+}
+
+def label(x):
+    """Gabungkan emoji + teks untuk ditampilkan di dropdown."""
+    return f"{EMOJI.get(x, '')} {x}".strip()
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -52,7 +78,7 @@ def buat_data_simulasi():
 
     LOGIKA (untuk dijelaskan ke dosen):
     - Produk 'basic' (kaos, hijab, kemeja, dalaman): konversi tinggi, KEBUTUHAN,
-      usia merata, lebih banyak beli "Dari Toko/Keranjang".
+      usia merata, lebih banyak beli "Kunjungan Toko".
     - Produk 'tren' (aksesoris viral, sneakers, dll): impulsif, SENANG, usia muda,
       lebih banyak beli "Dari Postingan".
     - Pembeli yang datang "Dari Postingan" lebih sering memberi Like.
@@ -141,20 +167,21 @@ with st.sidebar.form("form_parameter"):
 
     st.divider()
     st.markdown("**📦 Jenis Produk**")
-    produk = st.selectbox("Pilih produk", ["Semua"] + SEMUA_PRODUK,
-                          index=0, help="Pilih 'Semua' untuk seluruh produk, atau satu produk tertentu.")
+    produk = st.selectbox("Pilih produk", ["Semua"] + SEMUA_PRODUK, index=0,
+                          format_func=label,
+                          help="Pilih 'Semua' untuk seluruh produk, atau satu produk tertentu.")
 
     st.divider()
     st.markdown("**🧑‍🤝‍🧑 Pembeli**")
-    gender = st.selectbox("Gender", ["Semua"] + GENDER_OPS, index=0)
-    usia = st.selectbox("Segmen Usia", ["Semua"] + URUT_USIA, index=0,
+    gender = st.selectbox("Gender", ["Semua"] + GENDER_OPS, index=0, format_func=label)
+    usia = st.selectbox("Segmen Usia", ["Semua"] + URUT_USIA, index=0, format_func=label,
                         help="Pilih 'Semua' atau satu kelompok usia.")
 
     st.divider()
     st.markdown("**👁️ Sumber Pembelian (Viewer)**")
-    sumber = st.selectbox("Sumber", ["Semua"] + SUMBER_OPS, index=0,
-                          help="Pembeli datang dari postingan, atau dari kunjungan toko/keranjang.")
-    status_like = st.selectbox("Status Like", ["Semua"] + LIKE_OPS, index=0,
+    sumber = st.selectbox("Sumber", ["Semua"] + SUMBER_OPS, index=0, format_func=label,
+                          help="Pembeli datang dari postingan, atau dari kunjungan toko.")
+    status_like = st.selectbox("Status Like", ["Semua"] + LIKE_OPS, index=0, format_func=label,
                                help="Apakah pembeli memberi like pada produk, atau beli tanpa like.")
 
     st.divider()
@@ -293,7 +320,7 @@ with cl1:
     figs = px.pie(sb, names="sumber_pembelian", values="jumlah", hole=0.45,
                   color_discrete_sequence=["#FE2C55", "#7C5CFC"])
     figs.update_layout(margin=dict(l=0, r=0, t=30, b=0), height=320,
-                       title="Beli dari Postingan vs Toko/Keranjang")
+                       title="Beli dari Postingan vs Kunjungan Toko")
     st.plotly_chart(figs, use_container_width=True)
 with cl2:
     lk = pembeli_f.groupby(["sumber_pembelian", "status_like"]).size().reset_index(name="jumlah")
